@@ -2,6 +2,7 @@ import numpy as np
 np.warnings.filterwarnings('ignore')
 from sklearn.metrics import mean_squared_error
 from scipy.optimize import minimize
+import scipy.stats as sc
 from sko.DE import DE
 from sko.GA import GA
 from sko.PSO import PSO
@@ -199,6 +200,46 @@ class ArtificialFishSwarm:
         opt = AFSA(func=loss, n_dim=d, size_pop=self.size_pop, max_iter=self.max_iter, max_try_num=self.max_try_num, step=self.step, visual=self.visual, q=self.q, delta=self.delta)
         best_w, _ = opt.run()
         self.weights = np.array(best_w).reshape(d,)
+        
+    def predict(self, X):
+        return np.dot(X, self.weights)
+
+class GreedySearch:
+    def __init__(self, convergence, epsilon):
+        self.__class__.__name__ = 'GreedySearch'
+        self.convergence = convergence
+        self.epsilon = epsilon
+        self.weights = None
+        
+    def metric_spearman(self, x, Y):
+        return sc.stats.spearmanr(x, Y)[0]
+    
+    def conv_manhattan(self, n, vec, eps):
+        return n >= 1/eps
+    
+    def conv_euclidan(self, n, vec, eps):
+        return np.linalg.norm(vec) >= 1/eps
+    
+    def fit(self, X, y):
+        d = X.shape[1]
+        weights = np.zeros(d, dtype=int) # weights for the columns of X
+        sums_transposed = np.zeros(X.transpose().shape)
+        num_weights = 0 # integer makes increment fast and stable
+        best = 0
+        
+        if self.convergence == 'manhattan':
+            convergence_func = self.conv_manhattan
+        elif self.convergence == 'euclidean':
+            convergence_func = self.conv_euclidan
+            
+        while not convergence_func(num_weights, weights, self.epsilon):
+            num_weights += 1
+            sums_transposed = sums_transposed[best, :] + X.transpose()
+            err = [self.metric_spearman(sums_transposed[i,:] / float(num_weights), y) for i in range(sums_transposed.shape[0])]       
+            best = np.argmax(err)
+            weights[best] += 1
+            
+        self.weights = np.array(weights/float(num_weights)).reshape(d,)
         
     def predict(self, X):
         return np.dot(X, self.weights)
